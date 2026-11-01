@@ -10,7 +10,7 @@ const AUDIO_EXTENSIONS = /\.(mp3|wav|wave|ogg|oga|m4a|aac|flac|opus|weba|webm)$/
 const ROOM_WIDTH = 9; // metres, left <-> right
 const ROOM_DEPTH = 7; // metres, back <-> front
 const VOLUME_KEY = "muzie-volume";
-const COPY_TITLE = "M'uzie — spatial cassette deck";
+const COPY_TITLE = "M'uzie — облачный кассетный плеер";
 
 const state = {
   tracks: [],
@@ -647,7 +647,7 @@ function setPlaying(playing) {
 
 function resetNowPlaying() {
   dom.trackTitle.textContent = "Ничего не выбрано";
-  dom.tapeTitle.textContent = "NO TAPE";
+  dom.tapeTitle.textContent = "no tape";
   document.title = COPY_TITLE;
 
   dom.timeCurrent.textContent = "0:00";
@@ -655,6 +655,9 @@ function resetNowPlaying() {
   dom.progress.value = "0";
   dom.progress.style.setProperty("--progress", "0%");
   dom.progress.disabled = true;
+
+  dom.cassette.style.setProperty("--tape-left", "0.9");
+  dom.cassette.style.setProperty("--tape-right", "0.62");
 }
 
 /* --------------------------------------------------------------------------
@@ -669,6 +672,10 @@ function updateProgress() {
   dom.progress.value = String(Math.round(ratio * 1000));
   dom.progress.style.setProperty("--progress", `${ratio * 100}%`);
   dom.progress.disabled = duration === 0;
+
+  // The tape moves from the left reel to the right one.
+  dom.cassette.style.setProperty("--tape-left", String(0.9 - 0.28 * ratio));
+  dom.cassette.style.setProperty("--tape-right", String(0.62 + 0.28 * ratio));
 
   dom.timeCurrent.textContent = formatTime(current);
   dom.timeTotal.textContent = formatTime(duration);
@@ -847,27 +854,26 @@ function initVisualizer() {
       centerY,
       inner * 2.05
     );
-    halo.addColorStop(0, "rgba(142, 240, 255, 0.11)");
-    halo.addColorStop(0.55, "rgba(177, 140, 255, 0.05)");
-    halo.addColorStop(1, "rgba(142, 240, 255, 0)");
+    halo.addColorStop(0, "rgba(255, 214, 194, 0.42)");
+    halo.addColorStop(0.55, "rgba(216, 199, 246, 0.26)");
+    halo.addColorStop(1, "rgba(255, 255, 255, 0)");
     ctx2d.fillStyle = halo;
     ctx2d.beginPath();
     ctx2d.arc(centerX, centerY, inner * 2.05, 0, Math.PI * 2);
     ctx2d.fill();
 
     // A faint guide circle keeps the rose readable while the track is quiet.
-    ctx2d.strokeStyle = "rgba(255, 255, 255, 0.07)";
+    ctx2d.strokeStyle = "rgba(110, 90, 130, 0.14)";
     ctx2d.lineWidth = 1;
     ctx2d.beginPath();
     ctx2d.arc(centerX, centerY, inner, 0, Math.PI * 2);
     ctx2d.stroke();
 
     ctx2d.lineCap = "round";
-    ctx2d.lineWidth = Math.max(1.4, size * 0.0045);
+    ctx2d.lineJoin = "round";
 
+    // 1. Update every bar first: the bloom outline needs the whole ring.
     for (let i = 0; i < bars; i += 1) {
-      const angle = (i / bars) * Math.PI * 2 - Math.PI / 2;
-
       // Mirror the spectrum: both halves of the ring share the same bins.
       const m = i < half ? i : bars - 1 - i;
       const norm = m / (half - 1);
@@ -881,27 +887,78 @@ function initVisualizer() {
         const floor = 0.06 + 0.04 * Math.sin(m * 0.5 + time * 1.4);
         target = Math.max(spectrum, floor);
       } else {
-        target = 0.1 + 0.045 * Math.sin(time * 1.3 + m * 0.32);
+        target = 0.14 + 0.06 * Math.sin(time * 1.1 + m * 0.32) + 0.035 * Math.sin(time * 2.3 - m * 0.7);
       }
 
-      levels[i] += (target - levels[i]) * (live ? 0.32 : 0.06);
+      levels[i] += (target - levels[i]) * (live ? 0.3 : 0.06);
+    }
+
+    // 2. A soft filled bloom: the angelic silhouette behind the rays.
+    const bloom = ctx2d.createRadialGradient(
+      centerX,
+      centerY,
+      inner * 0.9,
+      centerX,
+      centerY,
+      inner * 2.15
+    );
+    bloom.addColorStop(0, "rgba(255, 214, 192, 0.34)");
+    bloom.addColorStop(0.55, "rgba(226, 197, 236, 0.24)");
+    bloom.addColorStop(1, "rgba(196, 216, 250, 0.07)");
+
+    ctx2d.beginPath();
+    for (let i = 0; i <= bars; i += 1) {
+      const k = i % bars;
+      const angle = (k / bars) * Math.PI * 2 - Math.PI / 2;
+      const length = inner * 0.08 + Math.pow(levels[k], 1.2) * inner * 1.02;
+      const radius = inner + length;
+      const x = centerX + Math.cos(angle) * radius;
+      const y = centerY + Math.sin(angle) * radius;
+      if (i === 0) {
+        ctx2d.moveTo(x, y);
+      } else {
+        ctx2d.lineTo(x, y);
+      }
+    }
+    ctx2d.closePath();
+    ctx2d.fillStyle = bloom;
+    ctx2d.fill();
+
+    // 3. Delicate rays over the bloom. One shared gradient keeps the whole
+    // rose warm at the base and airy at the tips.
+    const rayGradient = ctx2d.createRadialGradient(
+      centerX,
+      centerY,
+      inner,
+      centerX,
+      centerY,
+      inner * 2.15
+    );
+    rayGradient.addColorStop(0, "rgba(246, 176, 158, 0.9)");
+    rayGradient.addColorStop(0.55, "rgba(216, 174, 222, 0.75)");
+    rayGradient.addColorStop(1, "rgba(168, 198, 240, 0.55)");
+
+    ctx2d.lineWidth = Math.max(1.6, size * 0.005);
+    ctx2d.strokeStyle = rayGradient;
+
+    for (let i = 0; i < bars; i += 1) {
+      const angle = (i / bars) * Math.PI * 2 - Math.PI / 2;
       const value = levels[i];
 
-      const length = inner * 0.06 + Math.pow(value, 1.2) * inner * 1.35;
+      const length = inner * 0.08 + Math.pow(value, 1.2) * inner * 1.02;
       const startX = centerX + Math.cos(angle) * inner;
       const startY = centerY + Math.sin(angle) * inner;
       const endX = centerX + Math.cos(angle) * (inner + length);
       const endY = centerY + Math.sin(angle) * (inner + length);
 
-      const hue = 186 + norm * 128;
-      const alpha = 0.09 + value * 0.82;
-
-      ctx2d.strokeStyle = `hsla(${hue}, 100%, 72%, ${alpha})`;
+      ctx2d.globalAlpha = 0.12 + value * 0.5;
       ctx2d.beginPath();
       ctx2d.moveTo(startX, startY);
       ctx2d.lineTo(endX, endY);
       ctx2d.stroke();
     }
+
+    ctx2d.globalAlpha = 1;
   };
 
   render();
