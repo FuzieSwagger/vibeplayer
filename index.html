@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#070610" />
+  <meta
+    name="description"
+    content="M'uzie — локальный плеер с пространственным звуком: перетаскивайте колонку по комнате, а PannerNode меняет панораму и расстояние."
+  />
+  <title>M'uzie — spatial cassette deck</title>
+
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="canonical" href="https://fuzieswagger.github.io/vibeplayer/" />
+
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="M'uzie" />
+  <meta property="og:title" content="M'uzie — spatial cassette deck" />
+  <meta
+    property="og:description"
+    content="Кассетный плеер 80-х с настоящим пространственным звуком: тащите колонку по комнате, PannerNode двигает панораму и приглушает даль."
+  />
+  <meta property="og:url" content="https://fuzieswagger.github.io/vibeplayer/" />
+  <meta property="og:image" content="https://fuzieswagger.github.io/vibeplayer/assets/og.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="M'uzie — стеклянный кассетный плеер с комнатой пространственного звука" />
+  <meta property="og:locale" content="ru_RU" />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="M'uzie — spatial cassette deck" />
+  <meta
+    name="twitter:description"
+    content="Кассетный плеер 80-х с настоящим пространственным звуком на Web Audio API."
+  />
+  <meta name="twitter:image" content="https://fuzieswagger.github.io/vibeplayer/assets/og.png" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="aurora" aria-hidden="true">
+    <span class="orb orb--cyan"></span>
+    <span class="orb orb--violet"></span>
+    <span class="orb orb--pink"></span>
+  </div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand__text" aria-label="M'uzie">
+        <span class="brand__m">M</span><span class="brand__apos">'</span><span class="brand__rest">uzie</span>
+      </span>
+      <span class="brand__tag">spatial cassette deck</span>
+    </div>
+
+    <div class="topbar__right">
+      <span class="pill">
+        <span class="pill__dot" aria-hidden="true"></span>
+        HRTF · Web Audio
+      </span>
+      <button class="upload" id="uploadBtn" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 16V4" />
+          <path d="M7 9l5-5 5 5" />
+          <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+        </svg>
+        <span>Загрузить музыку</span>
+      </button>
+      <input
+        class="visually-hidden"
+        id="fileInput"
+        type="file"
+        accept="audio/*"
+        multiple
+      />
+    </div>
+  </header>
+
+  <main class="layout">
+    <!-- ------------------------------------------------------------------
+         Sound room
+         ------------------------------------------------------------------ -->
+    <section class="panel stage" aria-labelledby="room-title">
+      <div class="panel__head">
+        <div>
+          <p class="kicker">sound room</p>
+          <h2 class="panel__title" id="room-title">Комната звука</h2>
+        </div>
+        <p class="panel__hint">перетащи колонку — звук последует</p>
+      </div>
+
+      <div class="room" id="room">
+        <canvas class="room__canvas" id="viz" aria-hidden="true"></canvas>
+        <div class="room__grid" aria-hidden="true"></div>
+        <div class="room__beam" id="beam" aria-hidden="true"></div>
+
+        <div class="listener" aria-hidden="true">
+          <span class="listener__ring"></span>
+          <span class="listener__ring listener__ring--outer"></span>
+          <span class="listener__disc">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+                 stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 14v-2a8 8 0 0 1 16 0v2" />
+              <rect x="2.5" y="13" width="4" height="7" rx="2" />
+              <rect x="17.5" y="13" width="4" height="7" rx="2" />
+            </svg>
+          </span>
+          <span class="listener__label">you</span>
+        </div>
+
+        <div
+          class="speaker"
+          id="speaker"
+          role="slider"
+          tabindex="0"
+          aria-label="Позиция колонки в комнате"
+          aria-valuemin="0"
+          aria-valuemax="100"
+          aria-valuenow="78"
+          aria-valuetext="Колонка справа"
+        >
+          <span class="speaker__glow" aria-hidden="true"></span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="6" y="2.5" width="12" height="19" rx="3" />
+            <circle cx="12" cy="8" r="2.4" />
+            <circle cx="12" cy="16" r="3.4" />
+          </svg>
+          <span class="speaker__waves" aria-hidden="true">
+            <i></i><i></i><i></i>
+          </span>
+        </div>
+
+        <p class="room__hint" aria-hidden="true">drag the speaker</p>
+      </div>
+
+      <div class="room__readout">
+        <span>дистанция <b id="distance">0.0 м</b></span>
+        <span>панорама <b id="panLabel">по центру</b></span>
+        <span class="room__notice" id="spatialNotice" hidden>
+          Web Audio недоступен — играет обычное стерео
+        </span>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------------
+         Cassette + transport
+         ------------------------------------------------------------------ -->
+    <div class="side">
+      <section class="panel player" aria-labelledby="player-title">
+        <div class="panel__head panel__head--compact">
+          <div>
+            <p class="kicker">now spinning</p>
+            <h2 class="panel__title" id="player-title">Кассета</h2>
+          </div>
+          <span class="tape-badge">TYPE II · 60</span>
+        </div>
+
+        <div class="cassette" id="cassette" aria-hidden="true">
+          <span class="cassette__screw cassette__screw--tl"></span>
+          <span class="cassette__screw cassette__screw--tr"></span>
+          <span class="cassette__screw cassette__screw--bl"></span>
+          <span class="cassette__screw cassette__screw--br"></span>
+
+          <div class="cassette__label">
+            <span class="cassette__brand">M'UZIE · SPATIAL SERIES</span>
+            <span class="cassette__title" id="tapeTitle">NO TAPE</span>
+            <span class="cassette__side">SIDE A</span>
+          </div>
+
+          <div class="cassette__window">
+            <span class="cassette__tape" aria-hidden="true"></span>
+            <span class="reel reel--left"><span class="reel__hub"></span></span>
+            <span class="reel reel--right"><span class="reel__hub"></span></span>
+          </div>
+
+          <div class="cassette__foot">
+            <span>60 MIN</span>
+            <span class="cassette__line"></span>
+            <span>HIGH BIAS</span>
+          </div>
+        </div>
+
+        <div class="now">
+          <p class="now__label">сейчас играет</p>
+          <p class="now__title" id="trackTitle">Ничего не выбрано</p>
+        </div>
+
+        <div class="progress">
+          <div class="progress__times">
+            <span id="timeCurrent">0:00</span>
+            <span id="timeTotal">0:00</span>
+          </div>
+          <input
+            class="progress__range"
+            id="progress"
+            type="range"
+            min="0"
+            max="1000"
+            step="1"
+            value="0"
+            aria-label="Позиция трека"
+          />
+        </div>
+
+        <div class="controls">
+          <button class="ctrl" id="prevBtn" type="button" aria-label="Предыдущий трек">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M19 5v14L8 12z" />
+              <path d="M5 5v14" />
+            </svg>
+          </button>
+
+          <button class="ctrl ctrl--play" id="playBtn" type="button" aria-label="Воспроизвести" data-playing="false">
+            <svg class="icon-play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M8 5.5v13l11-6.5z" />
+            </svg>
+            <svg class="icon-pause" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <rect x="6.5" y="5" width="3.6" height="14" rx="1" />
+              <rect x="13.9" y="5" width="3.6" height="14" rx="1" />
+            </svg>
+          </button>
+
+          <button class="ctrl" id="nextBtn" type="button" aria-label="Следующий трек">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 5v14l11-7z" />
+              <path d="M19 5v14" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="volume">
+          <button class="volume__btn" id="muteBtn" type="button" aria-label="Выключить звук" data-muted="false">
+            <svg class="icon-volume" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M11 5 6.5 9H3v6h3.5L11 19z" />
+              <path d="M15.5 8.5a5 5 0 0 1 0 7" />
+              <path d="M18.5 6a9 9 0 0 1 0 12" />
+            </svg>
+            <svg class="icon-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M11 5 6.5 9H3v6h3.5L11 19z" />
+              <path d="m16 9 5 6M21 9l-5 6" />
+            </svg>
+          </button>
+          <input
+            class="volume__range"
+            id="volume"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value="80"
+            aria-label="Громкость"
+          />
+          <span class="volume__value" id="volumeValue">80%</span>
+        </div>
+      </section>
+
+      <!-- ----------------------------------------------------------------
+           Playlist
+           ---------------------------------------------------------------- -->
+      <section class="panel playlist" aria-labelledby="playlist-title">
+        <div class="panel__head panel__head--compact">
+          <div>
+            <p class="kicker">queue</p>
+            <h2 class="panel__title" id="playlist-title">
+              Плейлист <span class="count" id="trackCount">00</span>
+            </h2>
+          </div>
+          <button class="text-btn" id="clearPlaylist" type="button">Очистить</button>
+        </div>
+
+        <ul class="tracks" id="playlist"></ul>
+
+        <div class="empty" id="playlistEmpty">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
+               stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M9 18V5l11-2v13" />
+            <circle cx="6.5" cy="18" r="2.5" />
+            <circle cx="17.5" cy="16" r="2.5" />
+          </svg>
+          <p>Пока пусто</p>
+          <span>Перетащи аудиофайлы в окно или нажми «Загрузить музыку»</span>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <footer class="footer">
+    <span>M'uzie · local only</span>
+    <span>PannerNode + AnalyserNode · файлы не покидают устройство</span>
+  </footer>
+
+  <div class="dropzone" id="dropzone" aria-hidden="true">
+    <div class="dropzone__card">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"
+           stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 16V4" />
+        <path d="M7 9l5-5 5 5" />
+        <path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4" />
+      </svg>
+      <p>Отпусти, чтобы добавить в плейлист</p>
+      <span>MP3 · WAV · OGG · FLAC · M4A</span>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <audio id="audio" preload="metadata"></audio>
+
+  <script src="script.js"></script>
+</body>
+</html>

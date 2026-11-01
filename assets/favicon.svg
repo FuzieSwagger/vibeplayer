@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="M'uzie cassette icon">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#1a1230"/>
+      <stop offset="1" stop-color="#07060f"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#8ef0ff"/>
+      <stop offset="0.55" stop-color="#b18cff"/>
+      <stop offset="1" stop-color="#ff8ad4"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.42" r="0.55">
+      <stop offset="0" stop-color="#8ef0ff" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#8ef0ff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <rect width="64" height="64" rx="16" fill="url(#bg)"/>
+  <rect x="0.6" y="0.6" width="62.8" height="62.8" rx="15.4" fill="none" stroke="url(#edge)" stroke-opacity="0.55" stroke-width="1.2"/>
+  <circle cx="32" cy="28" r="26" fill="url(#glow)"/>
+
+  <rect x="12" y="17" width="40" height="30" rx="5.5" fill="#0d0a1c" stroke="url(#edge)" stroke-width="1.8"/>
+  <rect x="16" y="21" width="32" height="7" rx="2" fill="url(#edge)" fill-opacity="0.28"/>
+  <circle cx="22.5" cy="36.5" r="4.2" fill="none" stroke="#8ef0ff" stroke-width="1.6"/>
+  <circle cx="41.5" cy="36.5" r="4.2" fill="none" stroke="#ff8ad4" stroke-width="1.6"/>
+  <circle cx="22.5" cy="36.5" r="1.2" fill="#8ef0ff"/>
+  <circle cx="41.5" cy="36.5" r="1.2" fill="#ff8ad4"/>
+  <path d="M26.7 36.5h10.6" stroke="#b18cff" stroke-width="1.4" stroke-linecap="round"/>
+  <path d="M26 44.5h12" stroke="#ffffff" stroke-opacity="0.3" stroke-width="1.4" stroke-linecap="round"/>
+</svg>
