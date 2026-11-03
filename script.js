@@ -12,6 +12,10 @@ const ROOM_DEPTH = 7; // metres, back <-> front
 const VOLUME_KEY = "muzie-volume";
 const COPY_TITLE = "M'uzie — облачный кассетный плеер";
 
+// В обычном браузере этого объекта нет: веб-версия работает как раньше,
+// а desktop-обёртка даёт доступ к путям файлов и хранилищу плейлиста.
+const DESKTOP = window.muzieDesktop || null;
+
 const state = {
   tracks: [],
   current: -1,
@@ -99,6 +103,33 @@ function cleanName(filename) {
 function isAudioFile(file) {
   const type = (file.type || "").toLowerCase();
   return type.startsWith("audio/") || AUDIO_EXTENSIONS.test(file.name || "");
+}
+
+function getDesktopPath(file) {
+  if (!DESKTOP || typeof DESKTOP.getPathForFile !== "function") return "";
+
+  try {
+    return DESKTOP.getPathForFile(file) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+function getDesktopFileUrl(filePath) {
+  if (!DESKTOP || !filePath) return "";
+
+  try {
+    return DESKTOP.fileUrl(filePath) || "";
+  } catch (error) {
+    return "";
+  }
+}
+
+// Освобождать нужно только blob:-ссылки: file:// принадлежит самой ОС.
+function releaseTrackUrl(track) {
+  if (track && typeof track.url === "string" && track.url.startsWith("blob:")) {
+    URL.revokeObjectURL(track.url);
+  }
 }
 
 function showToast(message) {
@@ -446,6 +477,99 @@ function updatePlaylistPlaying() {
   }
 }
 
+// Сохраняет плейлист в %APPDATA%\M'uzie\playlist.json через Electron.
+// В браузере DESKTOP нет, поэтому вызов просто ничего не делает.
+function persistPlaylist() {
+  if (!DESKTOP || typeof DESKTOP.savePlaylist !== "function") return;
+
+  const current = state.tracks[state.current];
+
+  const payload = {
+    currentId: current ? current.id : null,
+    tracks: state.tracks
+      .map((track) => ({
+        id: track.id,
+        path: track.path || "",
+        name: track.name,
+        ext: track.ext,
+        size: track.size,
+      }))
+      .filter((track) => track.path),
+  };
+
+  try {
+    const result = DESKTOP.savePlaylist(payload);
+    if (result && typeof result.catch === "function") result.catch(() => {});
+  } catch (error) {
+    /* Если запись не удалась, плеер продолжает работать. */
+  }
+}
+
+async function restorePlaylist() {
+  if (!DESKTOP || typeof DESKTOP.loadPlaylist !== "function") return;
+
+  let data = null;
+  try {
+    data = await DESKTOP.loadPlaylist();
+  } catch (error) {
+    return;
+  }
+
+  const savedTracks = Array.isArray(data && data.tracks) ? data.tracks : [];
+  if (savedTracks.length === 0) return;
+
+  let missing = 0;
+
+  state.tracks = savedTracks
+    .map((saved, index) => {
+      const filePath = typeof saved.path === "string" ? saved.path : "";
+      if (!filePath) return null;
+
+      const id = Number(saved.id) > 0 ? Math.round(Number(saved.id)) : index + 1;
+      trackSeq = Math.max(trackSeq, id);
+
+      const exists = saved.exists !== false;
+      if (!exists) missing += 1;
+
+      const fallbackName = cleanName(filePath.split(/[\\/]/).pop() || "audio");
+
+      return {
+        id,
+        name: typeof saved.name === "string" && saved.name ? saved.name : fallbackName,
+        ext: typeof saved.ext === "string" && saved.ext ? saved.ext : "AUDIO",
+        size: Number(saved.size) || 0,
+        path: filePath,
+        url: exists ? getDesktopFileUrl(filePath) : "",
+        missing: !exists,
+      };
+    })
+    .filter(Boolean);
+
+  renderPlaylist();
+
+  const currentIndex = state.tracks.findIndex((track) => track.id === data.currentId);
+  if (currentIndex >= 0) {
+    const track = state.tracks[currentIndex];
+    state.current = currentIndex;
+
+    dom.trackTitle.textContent = track.name;
+    dom.tapeTitle.textContent = track.name;
+    document.title = `${track.name} — M'uzie`;
+
+    if (!track.missing && track.url) {
+      dom.audio.src = track.url;
+      dom.audio.load();
+      updateProgress();
+    }
+
+    renderPlaylist();
+  }
+
+  if (missing > 0) {
+    showToast(`Недоступно файлов: ${missing} — проверьте, на месте ли они`);
+  }
+}
+
 function renderPlaylist() {
   const fragment = document.createDocumentFragment();
 
@@ -454,6 +578,7 @@ function renderPlaylist() {
     item.className = "track";
     item.classList.toggle("is-active", index === state.current);
     item.classList.toggle("is-playing", index === state.current && state.playing);
+    item.classList.toggle("is-missing", Boolean(track.missing));
 
     const main = document.createElement("button");
     main.type = "button";
@@ -474,7 +599,9 @@ function renderPlaylist() {
 
     const meta = document.createElement("span");
     meta.className = "track__meta";
-    meta.textContent = `${track.ext} · ${formatBytes(track.size)}`;
+    meta.textContent = track.missing
+      ? "файл не найден"
+      : `${track.ext} · ${formatBytes(track.size)}`;
 
     info.append(name, meta);
 
@@ -519,7 +646,7 @@ function removeTrack(index) {
     setPlaying(false);
   }
 
-  URL.revokeObjectURL(track.url);
+  releaseTrackUrl(track);
   state.tracks.splice(index, 1);
 
   if (wasCurrent) {
@@ -533,6 +660,7 @@ function removeTrack(index) {
 
   renderPlaylist();
   updateProgress();
+  persistPlaylist();
 }
 
 function clearPlaylist() {
@@ -542,7 +670,7 @@ function clearPlaylist() {
   dom.audio.removeAttribute("src");
   dom.audio.load();
 
-  state.tracks.forEach((track) => URL.revokeObjectURL(track.url));
+  state.tracks.forEach((track) => releaseTrackUrl(track));
   state.tracks = [];
   state.current = -1;
 
@@ -550,6 +678,7 @@ function clearPlaylist() {
   resetNowPlaying();
   renderPlaylist();
   updateProgress();
+  persistPlaylist();
   showToast("Плейлист очищен");
 }
 
@@ -560,6 +689,11 @@ function clearPlaylist() {
 function playTrack(index) {
   const track = state.tracks[index];
   if (!track) return;
+
+  if (track.missing || !track.url) {
+    showToast(`Файл не найден: ${track.name}`);
+    return;
+  }
 
   if (index === state.current && !dom.audio.paused) return;
   if (index === state.current && dom.audio.paused) {
@@ -577,12 +711,19 @@ function playTrack(index) {
 
   renderPlaylist();
   updateProgress();
+  persistPlaylist();
   playAudio();
 }
 
 async function playAudio() {
   if (state.current < 0) {
     showToast("Сначала загрузите музыку");
+    return;
+  }
+
+  const track = state.tracks[state.current];
+  if (!track || track.missing || !track.url) {
+    showToast(track ? `Файл не найден: ${track.name}` : "Сначала загрузите музыку");
     return;
   }
 
@@ -993,17 +1134,22 @@ function addFiles(fileList) {
 
   valid.forEach((file) => {
     const extension = (file.name.split(".").pop() || "audio").toUpperCase();
+    const filePath = getDesktopPath(file);
+    const desktopUrl = getDesktopFileUrl(filePath);
 
     state.tracks.push({
       id: (trackSeq += 1),
       name: cleanName(file.name),
       ext: extension,
       size: file.size,
-      url: URL.createObjectURL(file),
+      path: filePath,
+      url: desktopUrl || URL.createObjectURL(file),
+      missing: false,
     });
   });
 
   renderPlaylist();
+  persistPlaylist();
 
   if (state.current < 0) {
     playTrack(startIndex);
@@ -1140,9 +1286,11 @@ function initPlayer() {
   resetNowPlaying();
   updateProgress();
   updateSpatial();
+  restorePlaylist();
 
   window.addEventListener("beforeunload", () => {
-    state.tracks.forEach((track) => URL.revokeObjectURL(track.url));
+    persistPlaylist();
+    state.tracks.forEach((track) => releaseTrackUrl(track));
   });
 }
 

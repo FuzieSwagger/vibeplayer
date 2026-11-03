@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, shell, screen } = require('electron');
+const { app, BrowserWindow, Menu, ipcMain, shell, screen } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -15,6 +15,114 @@ app.setName(APP_NAME);
 app.setAppUserModelId(APP_ID);
 
 const stateFile = () => path.join(app.getPath('userData'), 'window-state.json');
+const playlistFile = () => path.join(app.getPath('userData'), 'playlist.json');
+
+const MAX_TRACKS = 5000;
+const MAX_NAME_LENGTH = 512;
+const MAX_PATH_LENGTH = 4096;
+
+/* --------------------------------------------------------------------------
+   Плейлист на диске
+   -------------------------------------------------------------------------- */
+
+function sanitizeTrack(value, index) {
+  if (!value || typeof value !== 'object') return null;
+
+  const filePath = typeof value.path === 'string' ? value.path.trim() : '';
+  if (!filePath || filePath.length > MAX_PATH_LENGTH) return null;
+
+  const fallbackName = path.basename(filePath, path.extname(filePath)) || path.basename(filePath);
+  const rawName = typeof value.name === 'string' ? value.name.trim() : '';
+  const name = (rawName || fallbackName).slice(0, MAX_NAME_LENGTH);
+
+  const rawExt = typeof value.ext === 'string' ? value.ext.replace(/[^a-z0-9]/gi, '') : '';
+  const ext = (rawExt || path.extname(filePath).replace('.', '') || 'audio').toUpperCase().slice(0, 8);
+
+  const size = Number(value.size);
+  const id = Number(value.id);
+
+  return {
+    id: Number.isFinite(id) && id > 0 ? Math.round(id) : index + 1,
+    path: filePath,
+    name,
+    ext,
+    size: Number.isFinite(size) && size >= 0 ? Math.round(size) : 0
+  };
+}
+
+function readPlaylist() {
+  let data;
+  try {
+    data = JSON.parse(fs.readFileSync(playlistFile(), 'utf8'));
+  } catch {
+    return { tracks: [], currentId: null };
+  }
+
+  const rawTracks = Array.isArray(data?.tracks) ? data.tracks : [];
+  const tracks = rawTracks
+    .slice(0, MAX_TRACKS)
+    .map(sanitizeTrack)
+    .filter(Boolean)
+    .map((track) => {
+      let exists = false;
+      let size = track.size;
+
+      try {
+        const stat = fs.statSync(track.path);
+        exists = stat.isFile();
+        if (exists) size = stat.size;
+      } catch {
+        // Файл могли переместить или отключить диск: запись оставляем,
+        // чтобы плейлист не терялся, но помечаем как недоступную.
+      }
+
+      return { ...track, size, exists };
+    });
+
+  const rawCurrent = Number(data?.currentId);
+  return {
+    tracks,
+    currentId: Number.isFinite(rawCurrent) && rawCurrent > 0 ? Math.round(rawCurrent) : null
+  };
+}
+
+function writePlaylist(payload) {
+  const rawTracks = Array.isArray(payload?.tracks) ? payload.tracks : [];
+  const tracks = rawTracks
+    .slice(0, MAX_TRACKS)
+    .map(sanitizeTrack)
+    .filter(Boolean);
+
+  const rawCurrent = Number(payload?.currentId);
+  const currentId = Number.isFinite(rawCurrent) && rawCurrent > 0 ? Math.round(rawCurrent) : null;
+
+  const file = playlistFile();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+
+  const temp = `${file}.tmp`;
+  fs.writeFileSync(temp, JSON.stringify({ version: 1, currentId, tracks }, null, 2), 'utf8');
+  fs.renameSync(temp, file);
+
+  return { ok: true, count: tracks.length };
+}
+
+function isAppFrame(event) {
+  try {
+    return Boolean(event.senderFrame && event.senderFrame.url.startsWith('file://'));
+  } catch {
+    return false;
+  }
+}
+
+ipcMain.handle('playlist:load', (event) => {
+  if (!isAppFrame(event)) return { tracks: [], currentId: null };
+  return readPlaylist();
+});
+
+ipcMain.handle('playlist:save', (event, payload) => {
+  if (!isAppFrame(event)) return { ok: false, count: 0 };
+  return writePlaylist(payload);
+});
 
 function readWindowState() {
   try {
@@ -72,6 +180,7 @@ function createWindow() {
     autoHideMenuBar: true,
     icon: path.join(__dirname, '..', 'assets', 'icon.ico'),
     webPreferences: {
+      preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,

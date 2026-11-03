@@ -1571,6 +1571,18 @@ button {
   text-transform: uppercase;
 }
 
+.track.is-missing {
+  opacity: 0.72;
+}
+
+.track.is-missing .track__name {
+  color: var(--ink-faint);
+}
+
+.track.is-missing .track__meta {
+  color: #b4697f;
+}
+
 .track__bars {
   display: flex;
   align-items: flex-end;
