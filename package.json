@@ -1,0 +1,23 @@
+{
+  "name": "muzie",
+  "productName": "M'uzie",
+  "version": "1.1.0",
+  "private": true,
+  "description": "M'uzie — облачный кассетный плеер с пространственным звуком",
+  "main": "electron/main.cjs",
+  "author": "FuzieSwagger",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "start": "electron .",
+    "icon": "electron scripts/make-icon.cjs",
+    "package": "node scripts/build.cjs"
+  },
+  "devDependencies": {
+    "@electron/asar": "^4.3.1",
+    "electron": "^45.2.1",
+    "rcedit": "^5.0.2"
+  }
+}

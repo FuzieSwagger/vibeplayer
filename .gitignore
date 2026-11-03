@@ -5,3 +5,5 @@ desktop.ini
 .idea/
 *.log
 node_modules/
+dist/
+build/

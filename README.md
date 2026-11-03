@@ -104,12 +104,19 @@
 ```
 .
 ├── assets/
-│   ├── favicon.svg   # иконка сайта
+│   ├── favicon.svg   # иконка сайта и источник иконки приложения
+│   ├── icon.ico      # иконка Windows-приложения (16–256 px)
 │   ├── og.png        # превью для соцсетей 1200×630
 │   └── preview.webp  # превью для README
+├── electron/
+│   └── main.cjs      # окно Electron, single-instance, состояние окна
+├── scripts/
+│   ├── make-icon.cjs # SVG → PNG → ICO без сторонних библиотек
+│   └── build.cjs     # portable-сборка Windows и патч иконки exe
 ├── index.html        # разметка комнаты, кассеты и плейлиста
 ├── style.css         # пастель, облака, стекло, кассета, адаптив
 ├── script.js         # Web Audio, плейлист, drag & drop, визуализатор
+├── package.json      # Electron-обёртка и скрипты сборки
 ├── LICENSE           # MIT
 └── README.md
 ```
@@ -129,6 +136,38 @@ npx serve .
 
 > Браузеры запускают `AudioContext` только после действия пользователя, поэтому
 > первый трек начинает играть после клика по кнопке play или по треку.
+
+## Windows-приложение
+
+Веб-версия остаётся основным интерфейсом, а Electron-обёртка запускает её в
+отдельном окне без адресной строки и вкладок. Приложение работает офлайн,
+читает музыку с диска через системный диалог и drag-and-drop, а `localStorage`
+и Web Audio ведут себя так же, как в браузере.
+
+Готовое приложение установлено в профиль пользователя:
+
+```
+%LOCALAPPDATA%\Programs\Muzie\Muzie.exe
+```
+
+Ярлыки «M'uzie» созданы на рабочем столе и в меню «Пуск». Рядом с exe лежит
+`resources/app.asar` — та же веб-версия, упакованная для запуска через `file://`.
+
+### Сборка
+
+Нужен Node.js 22.12+ и Windows x64.
+
+```bash
+npm install          # Electron и утилита rcedit
+npm start            # запуск из исходников
+npm run icon         # пересобрать assets/icon.ico из favicon.svg
+npm run package      # portable-сборка в dist/Muzie-win32-x64
+```
+
+`npm run package` копирует Electron, упаковывает сайт в `app.asar` и вшивает
+иконку и версию в `Muzie.exe`. Папку `dist` можно переносить целиком; ярлык
+должен указывать на `Muzie.exe` внутри неё. `node_modules`, `dist` и временная
+папка `build` в репозиторий не попадают.
 
 ## Поддержка браузеров
 
